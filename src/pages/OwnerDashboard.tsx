@@ -51,45 +51,79 @@ export const OwnerDashboard: React.FC = () => {
             // 2. Charger toutes les sessions actives (Ouverte ou Pre-ouverte)
             const activeSessions = await api.sessions.getActiveForOwner(user.id);
 
-            // 3. Fusionner les données pour le dashboard
+            // 3. Charger les transactions pour CHAQUE session active
+            const txBySession: Record<number, any[]> = {};
+            await Promise.all(
+                activeSessions.map(async (s: any) => {
+                    try {
+                        const txs = await api.transactions.getBySession(s.id);
+                        txBySession[s.id] = txs || [];
+                    } catch { txBySession[s.id] = []; }
+                })
+            );
+
+            // 4. Fusionner les données + calculer les soldes actuels
             const dashboardData = allStands.map((stand: any) => {
                 const session = activeSessions.find((s: any) => s.id_stand === stand.id);
+                const txs = session ? (txBySession[session.id] || []) : [];
+
+                // Soldes en temps réel
+                const initCash = session?.solde_initial_cash_agent ?? session?.solde_initial_cash_proprio ?? 0;
+                const totalDep = txs.filter(tx => tx.type === 'Dépôt').reduce((s: number, tx: any) => s + tx.montant, 0);
+                const totalRet = txs.filter(tx => tx.type === 'Retrait').reduce((s: number, tx: any) => s + tx.montant, 0);
+                const cashActuel = initCash + totalDep - totalRet;
+
+                // E-Money par opérateur
+                const emoneyActuel: Record<number, number> = {};
+                session?.journee_operateur?.forEach((ob: any) => {
+                    const initE = ob.solde_initial_electro_agent ?? ob.solde_initial_electro_proprio ?? 0;
+                    const depOp = txs.filter(tx => tx.type === 'Dépôt' && tx.id_operateur === ob.id_operateur).reduce((s: number, tx: any) => s + tx.montant, 0);
+                    const retOp = txs.filter(tx => tx.type === 'Retrait' && tx.id_operateur === ob.id_operateur).reduce((s: number, tx: any) => s + tx.montant, 0);
+                    emoneyActuel[ob.id_operateur] = initE - depOp + retOp;
+                });
+
                 return {
                     ...stand,
                     session: session || null,
                     isOpen: session?.statut === 'Ouverte',
-                    isPreOpen: session?.statut === 'Pre-ouverte'
+                    isPreOpen: session?.statut === 'Pre-ouverte',
+                    transactions: txs,
+                    cashActuel,
+                    initCash,
+                    totalDep,
+                    totalRet,
+                    emoneyActuel
                 };
             });
 
-            // 4. Calculer les KPI globaux
+            // 5. KPIs globaux (basés sur soldes actuels)
             let cash = 0;
             let electro = 0;
             let transactionsCount = 0;
             let activeCount = 0;
 
-            activeSessions.forEach((s: any) => {
-                if (s.statut === 'Ouverte') {
+            dashboardData.forEach((item: any) => {
+                if (item.isOpen) {
                     activeCount++;
-                    cash += s.solde_initial_cash_proprio || 0;
-                    s.journee_operateur?.forEach((jo: any) => {
-                        electro += jo.solde_initial_electro_proprio || 0;
+                    cash += item.cashActuel || 0;
+                    item.session?.journee_operateur?.forEach((jo: any) => {
+                        electro += item.emoneyActuel[jo.id_operateur] ?? 0;
                     });
+                    transactionsCount += item.transactions.length;
                 }
             });
 
-            // 5. Charger les agents pour la sécurité
+            // 6. Charger les agents
             const { data: agentsList } = await supabase.from('profiles').select('*').eq('role', 'Agent');
             setAgents(agentsList || []);
 
-            // 6. Charger les clôtures récentes
+            // 7. Clôtures récentes
             const closedList = await api.sessions.getRecentClosedForOwner(user.id);
             setRecentClosed(closedList || []);
 
-            // 7. Charger les transactions récentes du jour (tous stands)
+            // 8. Transactions récentes
             const txList = await api.sessions.getRecentTransactionsForOwner(user.id, 25);
             setRecentTransactions(txList);
-            transactionsCount = txList.length;
 
             setStandsSessions(dashboardData);
             setStats({
@@ -122,12 +156,12 @@ export const OwnerDashboard: React.FC = () => {
         loadData();
     }, [loadData]);
 
-    // ── Polling automatique toutes les 30 secondes ──
+    // ── Polling toutes les 15 secondes (réduit de 30s) ──
     useEffect(() => {
         if (!user?.id) return;
         pollingRef.current = setInterval(() => {
             loadData();
-        }, 30000);
+        }, 15000);
         return () => {
             if (pollingRef.current) clearInterval(pollingRef.current);
         };
@@ -316,24 +350,56 @@ export const OwnerDashboard: React.FC = () => {
                         </div>
 
                         {item.session ? (
-                            <div style={{ background: item.session.solde_initial_cash_proprio !== item.session.solde_initial_cash_agent && item.session.statut === 'Ouverte' ? '#fff1f2' : '#f8fafc', borderRadius: '16px', padding: '16px', marginBottom: '20px', border: item.session.solde_initial_cash_proprio !== item.session.solde_initial_cash_agent && item.session.statut === 'Ouverte' ? '1px solid #fecaca' : 'none' }}>
-                                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '12px' }}>
-                                    <span style={{ fontSize: '13px', color: '#64748b' }}>Cash Proprio / Agent</span>
-                                    <span style={{ fontSize: '14px', fontWeight: 800, color: item.session.solde_initial_cash_proprio !== item.session.solde_initial_cash_agent && item.session.statut === 'Ouverte' ? '#ef4444' : '#1e293b' }}>
-                                        {item.session.solde_initial_cash_proprio?.toLocaleString()} / {item.session.solde_initial_cash_agent?.toLocaleString() || '—'}
-                                    </span>
+                            <div style={{ background: '#f8fafc', borderRadius: '16px', padding: '14px', marginBottom: '16px' }}>
+
+                                {/* Cash actuel */}
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
+                                    <span style={{ fontSize: '12px', color: '#64748b', fontWeight: 600 }}>💵 Cash actuel</span>
+                                    <div style={{ textAlign: 'right' }}>
+                                        <span style={{ fontSize: '15px', fontWeight: 900, color: (item.cashActuel ?? 0) >= (item.initCash ?? 0) ? '#10b981' : '#ef4444' }}>
+                                            {(item.cashActuel ?? item.initCash ?? 0).toLocaleString()} F
+                                        </span>
+                                        {item.totalDep + item.totalRet > 0 && (
+                                            <span style={{ fontSize: '10px', color: '#94a3b8', display: 'block' }}>
+                                                Init : {(item.initCash ?? 0).toLocaleString()} F
+                                                {' '}<span style={{ color: (item.cashActuel - item.initCash) >= 0 ? '#10b981' : '#ef4444', fontWeight: 700 }}>
+                                                    ({(item.cashActuel - item.initCash) >= 0 ? '+' : ''}{(item.cashActuel - item.initCash).toLocaleString()} F)
+                                                </span>
+                                            </span>
+                                        )}
+                                    </div>
                                 </div>
-                                {item.session.solde_initial_cash_proprio !== item.session.solde_initial_cash_agent && item.session.statut === 'Ouverte' && (
-                                    <div style={{ fontSize: '11px', color: '#ef4444', fontWeight: 700, textAlign: 'right', marginTop: '-8px', marginBottom: '12px' }}>
-                                        ⚠️ Écart de {(item.session.solde_initial_cash_agent - item.session.solde_initial_cash_proprio).toLocaleString()} FCFA
+
+                                {/* E-Money par opérateur */}
+                                {item.session.journee_operateur?.map((jo: any) => {
+                                    const opName = jo.nom_operateur || jo.operateur?.nom || `Op.${jo.id_operateur}`;
+                                    const soldeE = item.emoneyActuel?.[jo.id_operateur];
+                                    const initE = jo.solde_initial_electro_agent ?? jo.solde_initial_electro_proprio ?? 0;
+                                    const diffE = (soldeE ?? initE) - initE;
+                                    return (
+                                        <div key={jo.id_operateur} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+                                            <span style={{ fontSize: '12px', color: '#64748b', fontWeight: 600 }}>📱 {opName}</span>
+                                            <div style={{ textAlign: 'right' }}>
+                                                <span style={{ fontSize: '14px', fontWeight: 800, color: diffE >= 0 ? 'var(--primary)' : '#ef4444' }}>
+                                                    {(soldeE ?? initE).toLocaleString()} F
+                                                </span>
+                                                {diffE !== 0 && (
+                                                    <span style={{ fontSize: '10px', display: 'block', color: diffE > 0 ? 'var(--primary)' : '#ef4444', fontWeight: 700 }}>
+                                                        {diffE > 0 ? '+' : ''}{diffE.toLocaleString()} F
+                                                    </span>
+                                                )}
+                                            </div>
+                                        </div>
+                                    );
+                                })}
+
+                                {/* Nb transactions */}
+                                {item.isOpen && (
+                                    <div style={{ marginTop: '10px', paddingTop: '10px', borderTop: '1px solid #e2e8f0', display: 'flex', justifyContent: 'space-between' }}>
+                                        <span style={{ fontSize: '11px', color: '#94a3b8' }}>Opérations aujourd'hui</span>
+                                        <span style={{ fontSize: '13px', fontWeight: 800, color: 'var(--primary)' }}>{item.transactions?.length || 0}</span>
                                     </div>
                                 )}
-                                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                                    <span style={{ fontSize: '13px', color: '#64748b' }}>E-Money Total</span>
-                                    <span style={{ fontSize: '14px', fontWeight: 800, color: 'var(--primary)' }}>
-                                        {item.session.journee_operateur?.reduce((sum: number, jo: any) => sum + (jo.solde_initial_electro_proprio || 0), 0).toLocaleString()} F
-                                    </span>
-                                </div>
                             </div>
                         ) : (
                             <div style={{ height: '70px', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '20px', border: '1px dashed #cbd5e1', borderRadius: '16px' }}>
