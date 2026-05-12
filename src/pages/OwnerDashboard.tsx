@@ -88,6 +88,7 @@ export const OwnerDashboard: React.FC = () => {
                     session: session || null,
                     isOpen: session?.statut === 'Ouverte',
                     isPreOpen: session?.statut === 'Pre-ouverte',
+                    isClosed: session?.statut === 'Clôturée',
                     transactions: txs,
                     cashActuel,
                     initCash,
@@ -104,7 +105,7 @@ export const OwnerDashboard: React.FC = () => {
             let activeCount = 0;
 
             dashboardData.forEach((item: any) => {
-                if (item.isOpen) {
+                if (item.isOpen || item.isClosed) {
                     activeCount++;
                     cash += item.cashActuel || 0;
                     item.session?.journee_operateur?.forEach((jo: any) => {
@@ -320,7 +321,7 @@ export const OwnerDashboard: React.FC = () => {
                 gap: '24px'
             }}>
                 {standsSessions.map((item) => (
-                    <div key={item.id} className="glass-card animate-scale-in" style={{ padding: '24px', borderTop: `4px solid ${item.isOpen ? '#10b981' : item.isPreOpen ? '#f59e0b' : '#cbd5e1'}` }}>
+                    <div key={item.id} className="glass-card animate-scale-in" style={{ padding: '24px', borderTop: `4px solid ${item.isOpen ? '#10b981' : item.isPreOpen ? '#f59e0b' : item.isClosed ? '#64748b' : '#cbd5e1'}`, opacity: item.isClosed ? 0.85 : 1 }}>
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'start', marginBottom: '20px' }}>
                             <div>
                                 <h4 style={{ fontSize: '18px', fontWeight: 800, color: '#0f172a', marginBottom: '4px' }}>{item.nom}</h4>
@@ -329,10 +330,10 @@ export const OwnerDashboard: React.FC = () => {
                                         width: '8px',
                                         height: '8px',
                                         borderRadius: '50%',
-                                        background: item.isOpen ? '#10b981' : item.isPreOpen ? '#f59e0b' : '#cbd5e1'
+                                        background: item.isOpen ? '#10b981' : item.isPreOpen ? '#f59e0b' : item.isClosed ? '#64748b' : '#cbd5e1'
                                     }} />
                                     <span style={{ fontSize: '12px', color: '#64748b', fontWeight: 700, textTransform: 'uppercase' }}>
-                                        {item.isOpen ? 'En service' : item.isPreOpen ? 'Pre-ouvert' : 'Fermé'}
+                                        {item.isOpen ? 'En service' : item.isPreOpen ? 'Pre-ouvert' : item.isClosed ? 'Terminé (Clôturé)' : 'Fermé'}
                                     </span>
                                 </div>
                             </div>
@@ -395,10 +396,10 @@ export const OwnerDashboard: React.FC = () => {
                                 })}
 
                                 {/* Nb transactions */}
-                                {item.isOpen && (
+                                {(item.isOpen || item.isClosed) && (
                                     <div style={{ marginTop: '10px', paddingTop: '10px', borderTop: '1px solid #e2e8f0', display: 'flex', justifyContent: 'space-between' }}>
                                         <span style={{ fontSize: '11px', color: '#94a3b8' }}>Opérations aujourd'hui</span>
-                                        <span style={{ fontSize: '13px', fontWeight: 800, color: 'var(--primary)' }}>{item.transactions?.length || 0}</span>
+                                        <span style={{ fontSize: '13px', fontWeight: 800, color: item.isClosed ? '#64748b' : 'var(--primary)' }}>{item.transactions?.length || 0}</span>
                                     </div>
                                 )}
                             </div>

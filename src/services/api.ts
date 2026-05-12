@@ -171,7 +171,7 @@ export const api = {
                 .from('journee')
                 .select('*, stand(*), journee_operateur(*, operateur(*))')
                 .eq('id_proprietaire', ownerId)
-                .in('statut', ['Pre-ouverte', 'Ouverte'])
+                .in('statut', ['Pre-ouverte', 'Ouverte', 'Clôturée'])
                 .eq('date_jour', today);
             if (error) throw error;
             return data;
