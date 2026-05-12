@@ -553,96 +553,116 @@ export const OwnerDashboard: React.FC = () => {
                 </div>
             </div>
 
-            {/* Agent Security Management Section */}
-            <div style={{ marginTop: '48px' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                        <Shield size={24} color="#ef4444" />
-                        <h3 style={{ fontSize: '20px', fontWeight: 800, color: '#1e293b' }}>Sécurité & Agents</h3>
+            {/* 4.6. Gestion des Agents */}
+            <div style={{ marginTop: '56px', marginBottom: '80px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '28px' }}>
+                    <div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '4px' }}>
+                            <Shield size={24} color="var(--primary)" />
+                            <h3 style={{ fontSize: '24px', fontWeight: 800, color: '#0f172a', letterSpacing: '-0.5px' }}>Gestion des Agents</h3>
+                        </div>
+                        <p style={{ color: '#64748b', fontSize: '14px' }}>Contrôlez les accès et la sécurité de vos collaborateurs</p>
                     </div>
                     <button 
                         onClick={() => navigate('/config')} 
                         className="btn-primary" 
-                        style={{ padding: '8px 20px', fontSize: '14px' }}
+                        style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '12px 24px' }}
                     >
-                        + Ajouter un Agent
+                        <Plus size={18} /> Ajouter un Agent
                     </button>
                 </div>
 
-                <div className="glass-card" style={{ padding: 0 }}>
-                    <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-                        <thead>
-                            <tr style={{ background: '#f8fafc', textAlign: 'left' }}>
-                                <th style={{ padding: '16px 24px', fontSize: '12px', fontWeight: 700, color: '#64748b', textTransform: 'uppercase' }}>Agent</th>
-                                <th style={{ padding: '16px 24px', fontSize: '12px', fontWeight: 700, color: '#64748b', textTransform: 'uppercase' }}>Statut</th>
-                                <th style={{ padding: '16px 24px', fontSize: '12px', fontWeight: 700, color: '#64748b', textTransform: 'uppercase' }}>Téléphone</th>
-                                <th style={{ padding: '16px 24px', fontSize: '12px', fontWeight: 700, color: '#64748b', textTransform: 'uppercase', textAlign: 'right' }}>Actions</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {agents.map(agent => (
-                                <tr key={agent.id} style={{ borderBottom: '1px solid #f1f5f9' }}>
-                                    <td style={{ padding: '16px 24px' }}>
-                                        <p style={{ fontWeight: 700, color: '#0f172a' }}>{agent.prenom} {agent.nom}</p>
-                                        <p style={{ fontSize: '12px', color: '#64748b' }}>{agent.login}</p>
-                                    </td>
-                                    <td style={{ padding: '16px 24px' }}>
-                                        {agent.is_suspended ? (
-                                            <div style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', padding: '4px 12px', background: '#fee2e2', color: '#ef4444', borderRadius: '20px', fontSize: '11px', fontWeight: 800 }}>
-                                                <Lock size={12} /> SUSPENDU
-                                            </div>
-                                        ) : (
-                                            <div style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', padding: '4px 12px', background: '#ecfdf5', color: '#10b981', borderRadius: '20px', fontSize: '11px', fontWeight: 800 }}>
-                                                <ShieldCheck size={12} /> ACTIF
-                                            </div>
-                                        )}
-                                    </td>
-                                    <td style={{ padding: '16px 24px', fontSize: '14px', color: '#64748b' }}>
-                                        {agent.telephone || '—'}
-                                    </td>
-                                    <td style={{ padding: '16px 24px', textAlign: 'right', display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
-                                        <button
-                                            onClick={async () => {
-                                                const newPass = prompt(`Nouveau mot de passe pour ${agent.prenom} ${agent.nom} :`);
-                                                if (newPass && newPass.length >= 6) {
-                                                    try {
-                                                        await api.auth.resetAgentPassword(agent.id, newPass);
-                                                        alert("Mot de passe mis à jour avec succès. L'agent devra le changer à sa prochaine connexion.");
-                                                    } catch (err) {
-                                                        alert("Erreur lors de la mise à jour : " + (err as any).message);
-                                                    }
-                                                } else if (newPass) {
-                                                    alert("Le mot de passe doit faire au moins 6 caractères.");
-                                                }
-                                            }}
-                                            className="btn-secondary"
-                                            style={{ padding: '6px 12px', fontSize: '12px', display: 'flex', alignItems: 'center', gap: '6px' }}
-                                            title="Réinitialiser le mot de passe"
-                                        >
-                                            <Lock size={14} />
-                                            Reset
-                                        </button>
-                                        {agent.is_suspended && (
-                                            <button
-                                                onClick={() => handleReactivate(agent.id)}
-                                                className="btn-primary"
-                                                style={{ padding: '6px 16px', fontSize: '12px', background: '#10b981', borderColor: '#10b981' }}
-                                            >
-                                                Réactiver
-                                            </button>
-                                        )}
-                                    </td>
+                <div className="glass-card" style={{ padding: 0, overflow: 'hidden', border: '1px solid #e2e8f0' }}>
+                    <div style={{ overflowX: 'auto' }}>
+                        <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                            <thead>
+                                <tr style={{ background: '#f8fafc', textAlign: 'left' }}>
+                                    <th style={{ padding: '18px 24px', fontSize: '12px', fontWeight: 800, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Agent & Identifiant</th>
+                                    <th style={{ padding: '18px 24px', fontSize: '12px', fontWeight: 800, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Statut</th>
+                                    <th style={{ padding: '18px 24px', fontSize: '12px', fontWeight: 800, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Téléphone</th>
+                                    <th style={{ padding: '18px 24px', fontSize: '12px', fontWeight: 800, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.5px', textAlign: 'right' }}>Actions Sécurité</th>
                                 </tr>
-                            ))}
-                            {agents.length === 0 && (
-                                <tr>
-                                    <td colSpan={4} style={{ padding: '40px', textAlign: 'center', color: '#94a3b8', fontStyle: 'italic' }}>
-                                        Aucun agent enregistré pour le moment.
-                                    </td>
-                                </tr>
-                            )}
-                        </tbody>
-                    </table>
+                            </thead>
+                            <tbody>
+                                {agents.map(agent => (
+                                    <tr key={agent.id} style={{ borderBottom: '1px solid #f1f5f9', transition: 'background 0.2s' }} onMouseEnter={(e) => e.currentTarget.style.background = '#fcfdfe'} onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}>
+                                        <td style={{ padding: '20px 24px' }}>
+                                            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                                                <div style={{ width: '40px', height: '40px', borderRadius: '12px', background: 'rgba(79,70,229,0.1)', color: 'var(--primary)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: '16px' }}>
+                                                    {agent.prenom?.[0]}{agent.nom?.[0]}
+                                                </div>
+                                                <div>
+                                                    <p style={{ fontWeight: 800, color: '#1e293b', fontSize: '15px' }}>{agent.prenom} {agent.nom}</p>
+                                                    <p style={{ fontSize: '13px', color: '#64748b' }}>{agent.login || agent.email}</p>
+                                                </div>
+                                            </div>
+                                        </td>
+                                        <td style={{ padding: '20px 24px' }}>
+                                            {agent.is_suspended ? (
+                                                <div style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', padding: '6px 14px', background: '#fef2f2', color: '#ef4444', borderRadius: '20px', fontSize: '12px', fontWeight: 800, border: '1px solid #fee2e2' }}>
+                                                    <Lock size={14} /> SUSPENDU
+                                                </div>
+                                            ) : (
+                                                <div style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', padding: '6px 14px', background: '#ecfdf5', color: '#10b981', borderRadius: '20px', fontSize: '12px', fontWeight: 800, border: '1px solid #d1fae5' }}>
+                                                    <CheckCircle size={14} /> ACTIF
+                                                </div>
+                                            )}
+                                        </td>
+                                        <td style={{ padding: '20px 24px' }}>
+                                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#475569', fontSize: '14px', fontWeight: 600 }}>
+                                                <Smartphone size={16} color="#94a3b8" />
+                                                {agent.telephone || 'Non renseigné'}
+                                            </div>
+                                        </td>
+                                        <td style={{ padding: '20px 24px', textAlign: 'right' }}>
+                                            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
+                                                <button
+                                                    onClick={async () => {
+                                                        const newPass = prompt(`Nouveau mot de passe pour ${agent.prenom} :`);
+                                                        if (newPass && newPass.length >= 6) {
+                                                            try {
+                                                                await api.auth.resetAgentPassword(agent.id, newPass);
+                                                                alert("✅ Mot de passe réinitialisé. L'agent devra le changer.");
+                                                            } catch (err: any) {
+                                                                alert("❌ Erreur : " + err.message);
+                                                            }
+                                                        } else if (newPass) {
+                                                            alert("Le mot de passe doit faire au moins 6 caractères.");
+                                                        }
+                                                    }}
+                                                    className="btn-secondary"
+                                                    style={{ padding: '8px 16px', fontSize: '13px', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '6px', borderRadius: '10px' }}
+                                                    title="Réinitialiser le mot de passe"
+                                                >
+                                                    <RefreshCw size={14} /> Reset
+                                                </button>
+                                                {agent.is_suspended && (
+                                                    <button
+                                                        onClick={() => handleReactivate(agent.id)}
+                                                        className="btn-primary"
+                                                        style={{ padding: '8px 16px', fontSize: '13px', fontWeight: 700, borderRadius: '10px', background: '#10b981', borderColor: '#10b981' }}
+                                                    >
+                                                        Réactiver
+                                                    </button>
+                                                )}
+                                            </div>
+                                        </td>
+                                    </tr>
+                                ))}
+                                {agents.length === 0 && (
+                                    <tr>
+                                        <td colSpan={4} style={{ padding: '60px 24px', textAlign: 'center' }}>
+                                            <div style={{ width: '64px', height: '64px', background: '#f8fafc', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 16px' }}>
+                                                <Users size={32} color="#cbd5e1" />
+                                            </div>
+                                            <p style={{ color: '#64748b', fontWeight: 700 }}>Aucun agent trouvé</p>
+                                            <p style={{ color: '#94a3b8', fontSize: '14px' }}>Commencez par ajouter votre premier collaborateur.</p>
+                                        </td>
+                                    </tr>
+                                )}
+                            </tbody>
+                        </table>
+                    </div>
                 </div>
             </div>
         </div>
