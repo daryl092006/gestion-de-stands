@@ -19,7 +19,8 @@ import {
     Shield,
     ShieldCheck,
     Lock,
-    CheckCircle
+    CheckCircle,
+    Plus
 } from 'lucide-react';
 
 export const OwnerDashboard: React.FC = () => {
