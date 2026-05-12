@@ -166,9 +166,34 @@ export const api = {
 
     sessions: {
         async getActiveForOwner(ownerId: string) {
-            const { data, error } = await supabase.from('journee').select('*, stand(*), journee_operateur(*, operateur(*))').eq('id_proprietaire', ownerId).in('statut', ['Pre-ouverte', 'Ouverte']);
+            const today = new Date().toISOString().split('T')[0]; // filtre sur aujourd'hui
+            const { data, error } = await supabase
+                .from('journee')
+                .select('*, stand(*), journee_operateur(*, operateur(*))')
+                .eq('id_proprietaire', ownerId)
+                .in('statut', ['Pre-ouverte', 'Ouverte'])
+                .eq('date_jour', today);
             if (error) throw error;
             return data;
+        },
+        async getRecentTransactionsForOwner(ownerId: string, limit = 20) {
+            // Récupère les IDs des journées actives d'aujourd'hui
+            const today = new Date().toISOString().split('T')[0];
+            const { data: journees } = await supabase
+                .from('journee')
+                .select('id')
+                .eq('id_proprietaire', ownerId)
+                .eq('date_jour', today);
+            const journeeIds = journees?.map(j => j.id) || [];
+            if (journeeIds.length === 0) return [];
+            const { data, error } = await supabase
+                .from('transaction')
+                .select('*, journee(id_stand, stand(nom)), operateur(nom)')
+                .in('id_journee', journeeIds)
+                .order('date_heure', { ascending: false })
+                .limit(limit);
+            if (error) throw error;
+            return data || [];
         },
         async getRecentClosedForOwner(ownerId: string) {
             const { data, error } = await supabase.from('journee').select('*, stand(*)').eq('id_proprietaire', ownerId).eq('statut', 'Clôturée').order('date_jour', { ascending: false }).limit(5);

@@ -34,6 +34,7 @@ export const OwnerDashboard: React.FC = () => {
     const [standsSessions, setStandsSessions] = useState<any[]>([]);
     const [agents, setAgents] = useState<any[]>([]);
     const [recentClosed, setRecentClosed] = useState<any[]>([]);
+    const [recentTransactions, setRecentTransactions] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
     const [refreshing, setRefreshing] = useState(false);
     const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
@@ -84,6 +85,11 @@ export const OwnerDashboard: React.FC = () => {
             // 6. Charger les clôtures récentes
             const closedList = await api.sessions.getRecentClosedForOwner(user.id);
             setRecentClosed(closedList || []);
+
+            // 7. Charger les transactions récentes du jour (tous stands)
+            const txList = await api.sessions.getRecentTransactionsForOwner(user.id, 25);
+            setRecentTransactions(txList);
+            transactionsCount = txList.length;
 
             setStandsSessions(dashboardData);
             setStats({
@@ -380,6 +386,70 @@ export const OwnerDashboard: React.FC = () => {
                         <TrendingUp size={24} color="#64748b" />
                     </div>
                     <p style={{ fontSize: '14px', fontWeight: 700, color: '#64748b' }}>Ajouter un point de vente</p>
+                </div>
+            </div>
+
+            {/* Live Transactions Section */}
+            <div style={{ marginTop: '48px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                        <div style={{ width: '10px', height: '10px', borderRadius: '50%', background: '#10b981', boxShadow: '0 0 8px #10b981', animation: 'pulse 2s infinite' }} />
+                        <h3 style={{ fontSize: '20px', fontWeight: 800, color: '#1e293b' }}>Transactions en Direct — Aujourd'hui</h3>
+                    </div>
+                    <span style={{ fontSize: '13px', color: '#94a3b8', fontWeight: 600 }}>{recentTransactions.length} opération(s)</span>
+                </div>
+
+                <div className="glass-card" style={{ padding: 0, overflow: 'hidden' }}>
+                    {recentTransactions.length === 0 ? (
+                        <div style={{ padding: '48px', textAlign: 'center', color: '#94a3b8', fontStyle: 'italic' }}>
+                            Aucune transaction enregistrée aujourd'hui.
+                        </div>
+                    ) : (
+                        <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                            <thead>
+                                <tr style={{ background: '#f8fafc' }}>
+                                    <th style={{ padding: '14px 20px', fontSize: '11px', fontWeight: 800, color: '#64748b', textTransform: 'uppercase', textAlign: 'left' }}>Stand</th>
+                                    <th style={{ padding: '14px 20px', fontSize: '11px', fontWeight: 800, color: '#64748b', textTransform: 'uppercase', textAlign: 'left' }}>Type</th>
+                                    <th style={{ padding: '14px 20px', fontSize: '11px', fontWeight: 800, color: '#64748b', textTransform: 'uppercase', textAlign: 'left' }}>Opérateur</th>
+                                    <th style={{ padding: '14px 20px', fontSize: '11px', fontWeight: 800, color: '#64748b', textTransform: 'uppercase', textAlign: 'right' }}>Montant</th>
+                                    <th style={{ padding: '14px 20px', fontSize: '11px', fontWeight: 800, color: '#64748b', textTransform: 'uppercase', textAlign: 'right' }}>Heure</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {recentTransactions.map((tx: any) => {
+                                    const isDepot = tx.type === 'Dépôt';
+                                    return (
+                                        <tr key={tx.id} style={{ borderBottom: '1px solid #f8fafc' }}>
+                                            <td style={{ padding: '14px 20px' }}>
+                                                <span style={{ fontSize: '13px', fontWeight: 700, color: '#1e293b' }}>
+                                                    {tx.journee?.stand?.nom || '—'}
+                                                </span>
+                                            </td>
+                                            <td style={{ padding: '14px 20px' }}>
+                                                <span style={{
+                                                    display: 'inline-flex', alignItems: 'center', gap: '6px',
+                                                    padding: '4px 10px', borderRadius: '20px', fontSize: '12px', fontWeight: 800,
+                                                    background: isDepot ? '#ecfdf5' : '#fef2f2',
+                                                    color: isDepot ? '#10b981' : '#ef4444'
+                                                }}>
+                                                    {isDepot ? '↑' : '↓'} {tx.type}
+                                                </span>
+                                            </td>
+                                            <td style={{ padding: '14px 20px', fontSize: '13px', color: '#64748b' }}>
+                                                {tx.operateur?.nom || '—'}
+                                            </td>
+                                            <td style={{ padding: '14px 20px', textAlign: 'right', fontSize: '15px', fontWeight: 800, color: isDepot ? '#10b981' : '#ef4444' }}>
+                                                {isDepot ? '+' : '-'}{tx.montant?.toLocaleString()} F
+                                            </td>
+                                            <td style={{ padding: '14px 20px', textAlign: 'right', fontSize: '12px', color: '#94a3b8' }}>
+                                                {new Date(tx.date_heure).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}
+                                            </td>
+                                        </tr>
+                                    );
+                                })}
+                            </tbody>
+                        </table>
+                    )}
                 </div>
             </div>
 
