@@ -28,6 +28,14 @@ export const ConfigPage: React.FC = () => {
     const [selectedOps, setSelectedOps] = useState<{ id: number, number: string }[]>([]);
     const [selectedAgentId, setSelectedAgentId] = useState('');
 
+    // Stand settings modal
+    const [standSettingsTab, setStandSettingsTab] = useState<'agents' | 'operators'>('agents');
+    const [assignAgentId, setAssignAgentId] = useState('');
+    const [assigningAgent, setAssigningAgent] = useState(false);
+    const [newOpId, setNewOpId] = useState('');
+    const [newOpNumber, setNewOpNumber] = useState('');
+    const [addingOp, setAddingOp] = useState(false);
+
     // Transaction Form (Diagramme: Transaction)
     const [txForm, setTxForm] = useState({ opId: '', type: 'Dépôt', montant: '', client: '', reseau: '', comm: '' });
 
@@ -75,6 +83,63 @@ export const ConfigPage: React.FC = () => {
             setIsCreatingStand(false);
             loadData();
         } catch (err) { alert("Erreur."); }
+    };
+
+    const handleAssignAgent = async () => {
+        if (!editingStand || !assignAgentId) return;
+        setAssigningAgent(true);
+        try {
+            await api.stands.affectAgent(editingStand.id, assignAgentId);
+            // Refresh editing stand data
+            await loadData();
+            const updated = stands.find(s => s.id === editingStand.id);
+            if (updated) setEditingStand(updated);
+            setAssignAgentId('');
+            alert('Agent assigné avec succès !');
+        } catch (err: any) {
+            alert('Erreur : ' + (err.message || 'Cet agent est peut-être déjà assigné à ce stand.'));
+        } finally { setAssigningAgent(false); }
+    };
+
+    const handleRemoveAgent = async (agentId: string) => {
+        if (!editingStand) return;
+        if (!confirm('Retirer cet agent du stand ?')) return;
+        try {
+            const { error } = await supabase.from('affectation_agent')
+                .delete().eq('id_stand', editingStand.id).eq('id_agent', agentId);
+            if (error) throw error;
+            await loadData();
+            const updated = stands.find(s => s.id === editingStand.id);
+            if (updated) setEditingStand(updated);
+        } catch (err: any) { alert('Erreur : ' + err.message); }
+    };
+
+    const handleAddOperator = async () => {
+        if (!editingStand || !newOpId || !newOpNumber) return;
+        setAddingOp(true);
+        try {
+            await api.stands.linkOperator(editingStand.id, parseInt(newOpId), newOpNumber);
+            await loadData();
+            const updated = stands.find(s => s.id === editingStand.id);
+            if (updated) setEditingStand(updated);
+            setNewOpId('');
+            setNewOpNumber('');
+        } catch (err: any) {
+            alert('Erreur : ' + (err.message || 'Cet opérateur est peut-être déjà lié à ce stand.'));
+        } finally { setAddingOp(false); }
+    };
+
+    const handleRemoveOperator = async (opId: number) => {
+        if (!editingStand) return;
+        if (!confirm('Retirer cet opérateur du stand ?')) return;
+        try {
+            const { error } = await supabase.from('stand_operateur')
+                .delete().eq('id_stand', editingStand.id).eq('id_operateur', opId);
+            if (error) throw error;
+            await loadData();
+            const updated = stands.find(s => s.id === editingStand.id);
+            if (updated) setEditingStand(updated);
+        } catch (err: any) { alert('Erreur : ' + err.message); }
     };
 
     const NavItem = ({ id, icon: Icon, label }: { id: any, icon: any, label: string }) => (
@@ -442,6 +507,156 @@ export const ConfigPage: React.FC = () => {
                         <div style={{ display: 'flex', gap: '10px' }}>
                             <button onClick={() => setIsCreatingStand(false)} className="btn-secondary" style={{ flex: 1 }}>Annuler</button>
                             <button onClick={handleCreateStand} className="btn-primary" style={{ flex: 1 }}>Créer le stand</button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* MODALE PARAMÈTRES STAND - Assigner Agent & Opérateurs */}
+            {editingStand && (
+                <div style={{ position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh', background: 'rgba(0,0,0,0.65)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px' }}>
+                    <div style={{ background: 'white', borderRadius: '28px', width: '100%', maxWidth: '560px', maxHeight: '90vh', overflowY: 'auto', boxShadow: '0 25px 60px rgba(0,0,0,0.25)' }}>
+                        {/* Header */}
+                        <div style={{ padding: '28px 28px 0', borderBottom: '1px solid #f1f5f9', paddingBottom: '20px', marginBottom: '0' }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                <div>
+                                    <h3 style={{ fontSize: '20px', fontWeight: 900, margin: 0 }}>⚙️ {editingStand.nom}</h3>
+                                    <p style={{ fontSize: '13px', color: '#64748b', margin: '4px 0 0' }}>{editingStand.localisation || 'Localisation non définie'}</p>
+                                </div>
+                                <button onClick={() => setEditingStand(null)} style={{ background: '#f1f5f9', border: 'none', borderRadius: '50%', width: '36px', height: '36px', cursor: 'pointer', fontSize: '18px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>✕</button>
+                            </div>
+                            {/* Tabs */}
+                            <div style={{ display: 'flex', gap: '8px', marginTop: '20px' }}>
+                                <button
+                                    onClick={() => setStandSettingsTab('agents')}
+                                    style={{ flex: 1, padding: '10px', borderRadius: '12px', border: 'none', cursor: 'pointer', fontWeight: 700, fontSize: '14px', background: standSettingsTab === 'agents' ? 'var(--primary)' : '#f1f5f9', color: standSettingsTab === 'agents' ? 'white' : '#64748b', transition: 'all 0.2s' }}
+                                >👤 Agents ({editingStand.affectation_agent?.length || 0})</button>
+                                <button
+                                    onClick={() => setStandSettingsTab('operators')}
+                                    style={{ flex: 1, padding: '10px', borderRadius: '12px', border: 'none', cursor: 'pointer', fontWeight: 700, fontSize: '14px', background: standSettingsTab === 'operators' ? 'var(--primary)' : '#f1f5f9', color: standSettingsTab === 'operators' ? 'white' : '#64748b', transition: 'all 0.2s' }}
+                                >📱 Opérateurs ({editingStand.stand_operateur?.length || 0})</button>
+                            </div>
+                        </div>
+
+                        <div style={{ padding: '24px 28px 28px' }}>
+
+                        {/* ===== ONGLET AGENTS ===== */}
+                        {standSettingsTab === 'agents' && (
+                            <div>
+                                {/* Agents actuels */}
+                                <p style={{ fontSize: '12px', fontWeight: 800, color: '#94a3b8', textTransform: 'uppercase', marginBottom: '12px' }}>Agents affectés</p>
+                                {(editingStand.affectation_agent || []).length === 0 ? (
+                                    <div style={{ textAlign: 'center', padding: '20px', background: '#f8fafc', borderRadius: '16px', color: '#94a3b8', fontSize: '13px', marginBottom: '20px' }}>
+                                        Aucun agent affecté à ce stand
+                                    </div>
+                                ) : (
+                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginBottom: '20px' }}>
+                                        {editingStand.affectation_agent.map((aff: any) => (
+                                            <div key={aff.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 16px', background: '#f8fafc', borderRadius: '14px', border: '1px solid #e2e8f0' }}>
+                                                <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                                                    <div style={{ width: '38px', height: '38px', background: 'linear-gradient(135deg, #4f46e5, #7c3aed)', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white', fontWeight: 800, fontSize: '14px' }}>
+                                                        {(aff.profiles?.prenom || '?')[0]}
+                                                    </div>
+                                                    <div>
+                                                        <p style={{ fontWeight: 700, fontSize: '14px', margin: 0 }}>{aff.profiles?.prenom} {aff.profiles?.nom}</p>
+                                                        <p style={{ fontSize: '11px', color: '#64748b', margin: '2px 0 0' }}>{aff.profiles?.telephone || 'Pas de tél.'}</p>
+                                                    </div>
+                                                </div>
+                                                <button
+                                                    onClick={() => handleRemoveAgent(aff.id_agent)}
+                                                    style={{ background: '#fee2e2', color: '#ef4444', border: 'none', borderRadius: '10px', padding: '6px 12px', cursor: 'pointer', fontWeight: 700, fontSize: '12px' }}
+                                                >Retirer</button>
+                                            </div>
+                                        ))}
+                                    </div>
+                                )}
+
+                                {/* Assigner un nouveau agent */}
+                                <div style={{ background: '#f0f7ff', borderRadius: '16px', padding: '16px', border: '1px dashed #93c5fd' }}>
+                                    <p style={{ fontSize: '12px', fontWeight: 800, color: '#3b82f6', textTransform: 'uppercase', marginBottom: '12px' }}>➕ Assigner un agent</p>
+                                    <select
+                                        value={assignAgentId}
+                                        onChange={e => setAssignAgentId(e.target.value)}
+                                        style={{ width: '100%', height: '45px', padding: '0 15px', borderRadius: '12px', border: '1.5px solid #bfdbfe', background: 'white', marginBottom: '10px', fontSize: '14px' }}
+                                    >
+                                        <option value=''>-- Choisir un agent --</option>
+                                        {agents
+                                            .filter(a => !(editingStand.affectation_agent || []).some((aff: any) => aff.id_agent === a.id))
+                                            .map(agent => (
+                                                <option key={agent.id} value={agent.id}>{agent.prenom} {agent.nom} {agent.telephone ? `(${agent.telephone})` : ''}</option>
+                                            ))
+                                        }
+                                    </select>
+                                    {agents.filter(a => !(editingStand.affectation_agent || []).some((aff: any) => aff.id_agent === a.id)).length === 0 && (
+                                        <p style={{ fontSize: '12px', color: '#94a3b8', textAlign: 'center', marginBottom: '10px' }}>Tous vos agents sont déjà assignés à ce stand.</p>
+                                    )}
+                                    <button
+                                        onClick={handleAssignAgent}
+                                        disabled={!assignAgentId || assigningAgent}
+                                        style={{ width: '100%', height: '44px', background: assignAgentId ? 'var(--primary)' : '#e2e8f0', color: assignAgentId ? 'white' : '#94a3b8', border: 'none', borderRadius: '12px', fontWeight: 700, cursor: assignAgentId ? 'pointer' : 'not-allowed', fontSize: '14px', transition: 'all 0.2s' }}
+                                    >{assigningAgent ? 'Assignation...' : '✓ Assigner cet agent'}</button>
+                                </div>
+                            </div>
+                        )}
+
+                        {/* ===== ONGLET OPÉRATEURS ===== */}
+                        {standSettingsTab === 'operators' && (
+                            <div>
+                                {/* Opérateurs actuels */}
+                                <p style={{ fontSize: '12px', fontWeight: 800, color: '#94a3b8', textTransform: 'uppercase', marginBottom: '12px' }}>Opérateurs configurés</p>
+                                {(editingStand.stand_operateur || []).length === 0 ? (
+                                    <div style={{ textAlign: 'center', padding: '20px', background: '#f8fafc', borderRadius: '16px', color: '#94a3b8', fontSize: '13px', marginBottom: '20px' }}>
+                                        Aucun opérateur lié à ce stand
+                                    </div>
+                                ) : (
+                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginBottom: '20px' }}>
+                                        {editingStand.stand_operateur.map((so: any) => (
+                                            <div key={so.id_operateur} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 16px', background: '#f8fafc', borderRadius: '14px', border: '1px solid #e2e8f0' }}>
+                                                <div>
+                                                    <p style={{ fontWeight: 700, fontSize: '14px', margin: 0 }}>📱 {so.operateur?.nom}</p>
+                                                    <p style={{ fontSize: '11px', color: '#64748b', margin: '2px 0 0' }}>N° : {so.numero_compte || 'Non défini'}</p>
+                                                </div>
+                                                <button
+                                                    onClick={() => handleRemoveOperator(so.id_operateur)}
+                                                    style={{ background: '#fee2e2', color: '#ef4444', border: 'none', borderRadius: '10px', padding: '6px 12px', cursor: 'pointer', fontWeight: 700, fontSize: '12px' }}
+                                                >Retirer</button>
+                                            </div>
+                                        ))}
+                                    </div>
+                                )}
+
+                                {/* Ajouter opérateur */}
+                                <div style={{ background: '#f0fdf4', borderRadius: '16px', padding: '16px', border: '1px dashed #86efac' }}>
+                                    <p style={{ fontSize: '12px', fontWeight: 800, color: '#16a34a', textTransform: 'uppercase', marginBottom: '12px' }}>➕ Ajouter un opérateur</p>
+                                    <select
+                                        value={newOpId}
+                                        onChange={e => setNewOpId(e.target.value)}
+                                        style={{ width: '100%', height: '45px', padding: '0 15px', borderRadius: '12px', border: '1.5px solid #bbf7d0', background: 'white', marginBottom: '10px', fontSize: '14px' }}
+                                    >
+                                        <option value=''>-- Choisir un opérateur --</option>
+                                        {countries.flatMap((pays: any) =>
+                                            (pays.operateur || []).filter((op: any) =>
+                                                !(editingStand.stand_operateur || []).some((so: any) => so.id_operateur === op.id)
+                                            ).map((op: any) => (
+                                                <option key={op.id} value={op.id}>{op.nom} ({pays.nom})</option>
+                                            ))
+                                        )}
+                                    </select>
+                                    <input
+                                        value={newOpNumber}
+                                        onChange={e => setNewOpNumber(e.target.value)}
+                                        placeholder="Numéro de compte Mobile Money (ex: 90123456)"
+                                        style={{ width: '100%', height: '45px', padding: '0 15px', borderRadius: '12px', border: '1.5px solid #bbf7d0', background: 'white', marginBottom: '10px', fontSize: '14px' }}
+                                    />
+                                    <button
+                                        onClick={handleAddOperator}
+                                        disabled={!newOpId || !newOpNumber || addingOp}
+                                        style={{ width: '100%', height: '44px', background: (newOpId && newOpNumber) ? '#16a34a' : '#e2e8f0', color: (newOpId && newOpNumber) ? 'white' : '#94a3b8', border: 'none', borderRadius: '12px', fontWeight: 700, cursor: (newOpId && newOpNumber) ? 'pointer' : 'not-allowed', fontSize: '14px', transition: 'all 0.2s' }}
+                                    >{addingOp ? 'Ajout...' : '✓ Lier cet opérateur'}</button>
+                                </div>
+                            </div>
+                        )}
+
                         </div>
                     </div>
                 </div>
