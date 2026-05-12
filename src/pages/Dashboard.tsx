@@ -117,6 +117,24 @@ export const Dashboard: React.FC = () => {
     const totalRetraits = transactions.filter(tx => tx.type === 'Retrait').reduce((s, tx) => s + tx.montant, 0);
     const soldeNet = totalDepots - totalRetraits;
 
+    // ── Calcul des soldes ACTUELS (en temps réel) ──
+    // Cash actuel = Initial (agent si dispo, sinon proprio) + Dépôts - Retraits
+    const initCash = currentJournee?.solde_initial_cash_agent ?? currentJournee?.solde_initial_cash_proprio ?? 0;
+    const soldeCashActuel = initCash + totalDepots - totalRetraits;
+
+    // E-Money par opérateur :
+    // Dépôt = agent envoie e-money au client → E-Money DIMINUE
+    // Retrait = client envoie e-money à l'agent → E-Money AUGMENTE
+    const soldesEmoney: Record<number, number> = {};
+    if (currentJournee?.journee_operateur) {
+        currentJournee.journee_operateur.forEach((ob: any) => {
+            const initEmoney = ob.solde_initial_electro_agent ?? ob.solde_initial_electro_proprio ?? 0;
+            const depotsPourCetOp = transactions.filter(tx => tx.type === 'Dépôt' && tx.id_operateur === ob.id_operateur).reduce((s, tx) => s + tx.montant, 0);
+            const retraitsPourCetOp = transactions.filter(tx => tx.type === 'Retrait' && tx.id_operateur === ob.id_operateur).reduce((s, tx) => s + tx.montant, 0);
+            soldesEmoney[ob.id_operateur] = initEmoney - depotsPourCetOp + retraitsPourCetOp;
+        });
+    }
+
     // Changer de stand depuis le Dashboard (sans aller dans "Ma Journée")
     const handleSwitchSession = (session: any) => {
         setJournee(session);
@@ -303,30 +321,51 @@ export const Dashboard: React.FC = () => {
                 {/* Colonne gauche */}
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
 
-                    {/* Balances initiales */}
+                    {/* Soldes Actuels — mis à jour en temps réel */}
                     <div className="glass-card" style={{ padding: 0 }}>
                         <div style={{ padding: '18px 24px', borderBottom: '1px solid #f1f5f9', display: 'flex', alignItems: 'center', gap: '10px' }}>
                             <Coins size={16} color="var(--primary)" />
-                            <h3 style={{ fontSize: '15px', fontWeight: 800 }}>Balances Initiales</h3>
-                            <span style={{ marginLeft: 'auto', fontSize: '12px', color: 'var(--text-muted)', fontWeight: 600 }}>propriétaire / agent</span>
+                            <h3 style={{ fontSize: '15px', fontWeight: 800 }}>Soldes Actuels</h3>
+                            <span style={{ marginLeft: 'auto', fontSize: '11px', color: 'var(--text-muted)', fontWeight: 600 }}>mis à jour en temps réel</span>
                         </div>
-                        <div style={{ padding: '16px', display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))', gap: '10px' }}>
-                            <div style={{ background: '#f8fafc', padding: '14px', borderRadius: '12px' }}>
-                                <p style={{ fontSize: '11px', color: '#94a3b8', fontWeight: 700, marginBottom: '6px', textTransform: 'uppercase' }}>Cash</p>
-                                <p style={{ fontSize: '17px', fontWeight: 800 }}>{(currentJournee.solde_initial_cash_proprio || 0).toLocaleString()} <span style={{ fontSize: '11px', fontWeight: 400 }}>F</span></p>
-                                {currentJournee.solde_initial_cash_agent != null && (
-                                    <p style={{ fontSize: '11px', color: '#64748b', marginTop: '4px' }}>▸ Agent : {currentJournee.solde_initial_cash_agent.toLocaleString()} F</p>
-                                )}
+                        <div style={{ padding: '16px', display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))', gap: '10px' }}>
+
+                            {/* Cash actuel */}
+                            <div style={{ background: soldeCashActuel >= initCash ? '#f0fdf4' : '#fef2f2', padding: '14px', borderRadius: '12px', border: `1px solid ${soldeCashActuel >= initCash ? '#a7f3d0' : '#fecaca'}` }}>
+                                <p style={{ fontSize: '11px', color: '#94a3b8', fontWeight: 700, marginBottom: '6px', textTransform: 'uppercase' }}>💵 Cash</p>
+                                <p style={{ fontSize: '20px', fontWeight: 900, color: soldeCashActuel >= initCash ? '#10b981' : '#ef4444' }}>
+                                    {soldeCashActuel.toLocaleString()} <span style={{ fontSize: '11px', fontWeight: 400 }}>F</span>
+                                </p>
+                                <p style={{ fontSize: '10px', color: '#94a3b8', marginTop: '4px' }}>
+                                    Init : {initCash.toLocaleString()} F
+                                    {soldeCashActuel !== initCash && (
+                                        <span style={{ color: soldeCashActuel > initCash ? '#10b981' : '#ef4444', fontWeight: 700, marginLeft: '4px' }}>
+                                            ({soldeCashActuel > initCash ? '+' : ''}{(soldeCashActuel - initCash).toLocaleString()} F)
+                                        </span>
+                                    )}
+                                </p>
                             </div>
+
+                            {/* E-Money par opérateur */}
                             {currentJournee.journee_operateur?.map((ob: any) => {
                                 const opName = ob.nom_operateur || standOperators.find(so => so.id_operateur === ob.id_operateur)?.operateur?.nom || `Op. ${ob.id_operateur}`;
+                                const initEmoney = ob.solde_initial_electro_agent ?? ob.solde_initial_electro_proprio ?? 0;
+                                const soldeActuelEmoney = soldesEmoney[ob.id_operateur] ?? initEmoney;
+                                const diff = soldeActuelEmoney - initEmoney;
                                 return (
-                                    <div key={ob.id_operateur} style={{ background: '#f8fafc', padding: '14px', borderRadius: '12px' }}>
-                                        <p style={{ fontSize: '11px', color: '#94a3b8', fontWeight: 700, marginBottom: '6px', textTransform: 'uppercase' }}>{opName}</p>
-                                        <p style={{ fontSize: '17px', fontWeight: 800 }}>{(ob.solde_initial_electro_proprio || 0).toLocaleString()} <span style={{ fontSize: '11px', fontWeight: 400 }}>F</span></p>
-                                        {ob.solde_initial_electro_agent != null && (
-                                            <p style={{ fontSize: '11px', color: '#64748b', marginTop: '4px' }}>▸ Agent : {ob.solde_initial_electro_agent.toLocaleString()} F</p>
-                                        )}
+                                    <div key={ob.id_operateur} style={{ background: diff >= 0 ? '#eff6ff' : '#fef2f2', padding: '14px', borderRadius: '12px', border: `1px solid ${diff >= 0 ? '#bfdbfe' : '#fecaca'}` }}>
+                                        <p style={{ fontSize: '11px', color: '#94a3b8', fontWeight: 700, marginBottom: '6px', textTransform: 'uppercase' }}>📱 {opName}</p>
+                                        <p style={{ fontSize: '20px', fontWeight: 900, color: diff >= 0 ? 'var(--primary)' : '#ef4444' }}>
+                                            {soldeActuelEmoney.toLocaleString()} <span style={{ fontSize: '11px', fontWeight: 400 }}>F</span>
+                                        </p>
+                                        <p style={{ fontSize: '10px', color: '#94a3b8', marginTop: '4px' }}>
+                                            Init : {initEmoney.toLocaleString()} F
+                                            {diff !== 0 && (
+                                                <span style={{ color: diff > 0 ? 'var(--primary)' : '#ef4444', fontWeight: 700, marginLeft: '4px' }}>
+                                                    ({diff > 0 ? '+' : ''}{diff.toLocaleString()} F)
+                                                </span>
+                                            )}
+                                        </p>
                                     </div>
                                 );
                             })}
