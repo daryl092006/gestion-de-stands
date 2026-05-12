@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback, useRef } from 'react';
 import { useAppStore } from '../store/appStore';
 import { api } from '../services/api';
 import { useNavigate } from 'react-router-dom';
@@ -36,6 +36,8 @@ export const OwnerDashboard: React.FC = () => {
     const [recentClosed, setRecentClosed] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
     const [refreshing, setRefreshing] = useState(false);
+    const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
+    const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
     const navigate = useNavigate();
 
@@ -89,8 +91,9 @@ export const OwnerDashboard: React.FC = () => {
                 totalElectro: electro,
                 activeStands: activeCount,
                 totalStands: allStands.length,
-                completedTransactions: transactionsCount // À affiner si on veut le total réel
+                completedTransactions: transactionsCount
             });
+            setLastUpdated(new Date());
         } catch (err) {
             console.error('Error loading dashboard data:', err);
         } finally {
@@ -112,6 +115,45 @@ export const OwnerDashboard: React.FC = () => {
     useEffect(() => {
         loadData();
     }, [loadData]);
+
+    // ── Polling automatique toutes les 30 secondes ──
+    useEffect(() => {
+        if (!user?.id) return;
+        pollingRef.current = setInterval(() => {
+            loadData();
+        }, 30000);
+        return () => {
+            if (pollingRef.current) clearInterval(pollingRef.current);
+        };
+    }, [loadData, user?.id]);
+
+    // ── Supabase Realtime : écouter les nouvelles transactions ──
+    useEffect(() => {
+        if (!user?.id) return;
+        const channel = supabase
+            .channel('owner-dashboard-realtime')
+            .on(
+                'postgres_changes',
+                { event: 'INSERT', schema: 'public', table: 'transaction' },
+                (_payload) => {
+                    // Une nouvelle transaction a été enregistrée → rafraîchir
+                    loadData();
+                }
+            )
+            .on(
+                'postgres_changes',
+                { event: 'UPDATE', schema: 'public', table: 'journee' },
+                (_payload) => {
+                    // Statut d'une journée a changé (ouverture, clôture) → rafraîchir
+                    loadData();
+                }
+            )
+            .subscribe();
+
+        return () => {
+            supabase.removeChannel(channel);
+        };
+    }, [user?.id, loadData]);
 
     if (loading) {
         return (
@@ -139,15 +181,22 @@ export const OwnerDashboard: React.FC = () => {
                         Vue d'ensemble de vos {stats.totalStands} points de vente.
                     </p>
                 </div>
-                <button
-                    onClick={loadData}
-                    className="btn-secondary"
-                    disabled={refreshing}
-                    style={{ borderRadius: '16px', padding: '12px 24px', display: 'flex', alignItems: 'center', gap: '10px' }}
-                >
-                    <RefreshCw size={18} className={refreshing ? 'animate-spin' : ''} />
-                    {refreshing ? 'Mise à jour...' : 'Actualiser'}
-                </button>
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '6px' }}>
+                    <button
+                        onClick={loadData}
+                        className="btn-secondary"
+                        disabled={refreshing}
+                        style={{ borderRadius: '16px', padding: '12px 24px', display: 'flex', alignItems: 'center', gap: '10px' }}
+                    >
+                        <RefreshCw size={18} className={refreshing ? 'animate-spin' : ''} />
+                        {refreshing ? 'Mise à jour...' : 'Actualiser'}
+                    </button>
+                    {lastUpdated && (
+                        <span style={{ fontSize: '11px', color: '#94a3b8', fontWeight: 500 }}>
+                            🔄 Mis à jour : {lastUpdated.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+                        </span>
+                    )}
+                </div>
             </div>
 
             {/* Global Stats Cards */}
