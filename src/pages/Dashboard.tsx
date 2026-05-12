@@ -1,6 +1,7 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback, useRef } from 'react';
 import { useAppStore } from '../store/appStore';
 import { api } from '../services/api';
+import { supabase } from '../lib/supabase';
 import {
     ArrowUpRight,
     ArrowDownLeft,
@@ -24,9 +25,10 @@ export const Dashboard: React.FC = () => {
     // Sessions actives disponibles (pour le sélecteur si plusieurs stands)
     const [activeSessions, setActiveSessions] = useState<any[]>([]);
     const [standOperators, setStandOperators] = useState<any[]>([]);
-    const [bootstrapping, setBootstrapping] = useState(true); // premier chargement
+    const [bootstrapping, setBootstrapping] = useState(true);
     const [loadingTx, setLoadingTx] = useState(false);
     const [showPicker, setShowPicker] = useState(false);
+    const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
     // ──────────────────────────────────────────────────
     // 1. Au montage : récupérer toutes les sessions actives
@@ -64,28 +66,49 @@ export const Dashboard: React.FC = () => {
         fetchActiveSessions();
     }, [fetchActiveSessions]);
 
-    // ──────────────────────────────────────────────────
-    // 2. Charger les transactions & opérateurs quand la journée change
-    // ──────────────────────────────────────────────────
-    useEffect(() => {
-        const fetchData = async () => {
-            if (!currentJournee) return;
-            setLoadingTx(true);
-            try {
-                const [txData, opsData] = await Promise.all([
-                    api.transactions.getBySession(currentJournee.id),
-                    api.stands.getOperators(currentJournee.id_stand)
-                ]);
-                setTransactions(txData as any);
-                setStandOperators(opsData);
-            } catch (err) {
-                console.error('Dashboard: error fetching tx/ops', err);
-            } finally {
-                setLoadingTx(false);
-            }
-        };
-        fetchData();
+    // ── Charger les transactions & opérateurs quand la journée change ──
+    const fetchTransactions = useCallback(async () => {
+        if (!currentJournee) return;
+        setLoadingTx(true);
+        try {
+            const [txData, opsData] = await Promise.all([
+                api.transactions.getBySession(currentJournee.id),
+                api.stands.getOperators(currentJournee.id_stand)
+            ]);
+            setTransactions(txData as any);
+            setStandOperators(opsData);
+        } catch (err) {
+            console.error('Dashboard: error fetching tx/ops', err);
+        } finally {
+            setLoadingTx(false);
+        }
     }, [currentJournee?.id, setTransactions]);
+
+    useEffect(() => {
+        fetchTransactions();
+    }, [fetchTransactions]);
+
+    // ── Polling automatique toutes les 15 secondes ──
+    useEffect(() => {
+        if (!user?.id) return;
+        pollingRef.current = setInterval(() => {
+            fetchTransactions();
+        }, 15000);
+        return () => { if (pollingRef.current) clearInterval(pollingRef.current); };
+    }, [fetchTransactions, user?.id]);
+
+    // ── Supabase Realtime : nouvelle transaction → re-fetch immédiat ──
+    useEffect(() => {
+        if (!currentJournee?.id) return;
+        const channel = supabase
+            .channel(`agent-tx-${currentJournee.id}`)
+            .on('postgres_changes',
+                { event: 'INSERT', schema: 'public', table: 'transaction', filter: `id_journee=eq.${currentJournee.id}` },
+                () => { fetchTransactions(); }
+            )
+            .subscribe();
+        return () => { supabase.removeChannel(channel); };
+    }, [currentJournee?.id, fetchTransactions]);
 
     // ──────────────────────────────────────────────────
     // Calculs
