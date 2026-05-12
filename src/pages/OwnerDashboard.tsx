@@ -20,7 +20,8 @@ import {
     ShieldCheck,
     Lock,
     CheckCircle,
-    Plus
+    Plus,
+    AlertTriangle
 } from 'lucide-react';
 
 export const OwnerDashboard: React.FC = () => {
@@ -395,11 +396,54 @@ export const OwnerDashboard: React.FC = () => {
                                     );
                                 })}
 
-                                {/* Nb transactions */}
-                                {(item.isOpen || item.isClosed) && (
-                                    <div style={{ marginTop: '10px', paddingTop: '10px', borderTop: '1px solid #e2e8f0', display: 'flex', justifyContent: 'space-between' }}>
-                                        <span style={{ fontSize: '11px', color: '#94a3b8' }}>Opérations aujourd'hui</span>
-                                        <span style={{ fontSize: '13px', fontWeight: 800, color: item.isClosed ? '#64748b' : 'var(--primary)' }}>{item.transactions?.length || 0}</span>
+                                {/* Détection des incohérences à la clôture */}
+                                {item.isClosed && (
+                                    <div style={{ marginTop: '16px', paddingTop: '16px', borderTop: '2px dashed #e2e8f0' }}>
+                                        <p style={{ fontSize: '11px', fontWeight: 800, color: '#64748b', marginBottom: '12px', textTransform: 'uppercase' }}>Vérification de Clôture</p>
+                                        
+                                        {/* Écart Cash */}
+                                        {Math.abs((item.session.solde_final_cash || 0) - (item.cashActuel || 0)) > 1 && (
+                                            <div style={{ background: '#fef2f2', border: '1px solid #fecaca', padding: '10px', borderRadius: '10px', marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '10px' }}>
+                                                <AlertTriangle size={16} color="#ef4444" />
+                                                <div style={{ flex: 1 }}>
+                                                    <p style={{ fontSize: '11px', color: '#991b1b', fontWeight: 700 }}>Incohérence Cash</p>
+                                                    <p style={{ fontSize: '13px', color: '#ef4444', fontWeight: 800 }}>
+                                                        Écart : {((item.session.solde_final_cash || 0) - (item.cashActuel || 0)).toLocaleString()} F
+                                                    </p>
+                                                </div>
+                                            </div>
+                                        )}
+
+                                        {/* Écart E-Money */}
+                                        {item.session.journee_operateur?.map((jo: any) => {
+                                            const theoretical = item.emoneyActuel[jo.id_operateur] || 0;
+                                            const declared = jo.solde_final_electro || 0;
+                                            const diff = declared - theoretical;
+                                            if (Math.abs(diff) > 1) {
+                                                const opName = jo.nom_operateur || jo.operateur?.nom || `Op.${jo.id_operateur}`;
+                                                return (
+                                                    <div key={`err-${jo.id_operateur}`} style={{ background: '#fffbeb', border: '1px solid #fde68a', padding: '10px', borderRadius: '10px', marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '10px' }}>
+                                                        <AlertTriangle size={16} color="#d97706" />
+                                                        <div style={{ flex: 1 }}>
+                                                            <p style={{ fontSize: '11px', color: '#92400e', fontWeight: 700 }}>Incohérence {opName}</p>
+                                                            <p style={{ fontSize: '13px', color: '#d97706', fontWeight: 800 }}>
+                                                                Écart : {diff.toLocaleString()} F
+                                                            </p>
+                                                        </div>
+                                                    </div>
+                                                );
+                                            }
+                                            return null;
+                                        })}
+
+                                        {/* Si tout est OK */}
+                                        {Math.abs((item.session.solde_final_cash || 0) - (item.cashActuel || 0)) <= 1 && 
+                                         item.session.journee_operateur?.every((jo: any) => Math.abs((jo.solde_final_electro || 0) - (item.emoneyActuel[jo.id_operateur] || 0)) <= 1) && (
+                                            <div style={{ background: '#ecfdf5', border: '1px solid #d1fae5', padding: '10px', borderRadius: '10px', display: 'flex', alignItems: 'center', gap: '10px' }}>
+                                                <CheckCircle size={16} color="#10b981" />
+                                                <p style={{ fontSize: '12px', color: '#065f46', fontWeight: 700 }}>Bilan cohérent à 100%</p>
+                                            </div>
+                                        )}
                                     </div>
                                 )}
                             </div>
