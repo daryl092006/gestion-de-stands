@@ -42,19 +42,23 @@ export const Dashboard: React.FC = () => {
             }
             setActiveSessions(sessions);
 
-            // Si aucun stand n'est encore sélectionné dans le store ET qu'on a des sessions,
-            // on sélectionne automatiquement la première (ou l'unique)
-            if (!currentJournee && sessions.length > 0) {
+            // Toujours re-sélectionner la première session disponible
+            // (permet l'actualisation même si une journée était déjà en store)
+            if (sessions.length > 0) {
                 const first = sessions[0];
                 setJournee(first);
                 setCurrentStand(first.stand);
+            } else {
+                // Plus de session active → vider le store
+                setJournee(null);
+                setCurrentStand(null);
             }
         } catch (err) {
             console.error('Dashboard: error fetching active sessions', err);
         } finally {
             setBootstrapping(false);
         }
-    }, [user?.id, user?.role, currentJournee, setJournee, setCurrentStand]);
+    }, [user?.id, user?.role, setJournee, setCurrentStand]);
 
     useEffect(() => {
         fetchActiveSessions();

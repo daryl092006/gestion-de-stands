@@ -176,12 +176,37 @@ export const api = {
             return data;
         },
         async getActiveForAgent(agentId: string) {
-            const { data: stands } = await supabase.from('affectation_agent').select('id_stand').eq('id_agent', agentId);
-            const standIds = stands?.map(s => s.id_stand) || [];
-            if (standIds.length === 0) return [];
-            const { data, error } = await supabase.from('journee').select('*, stand(*), journee_operateur(*, operateur(*))').in('id_stand', standIds).in('statut', ['Pre-ouverte', 'Ouverte']);
-            if (error) throw error;
-            return data;
+            // Étape 1 : récupérer les stands affectés à l'agent
+            const { data: affectations, error: affErr } = await supabase
+                .from('affectation_agent')
+                .select('id_stand')
+                .eq('id_agent', agentId);
+
+            if (affErr) {
+                console.error('[getActiveForAgent] Erreur lecture affectation_agent:', affErr);
+                return [];
+            }
+
+            const standIds = affectations?.map(s => s.id_stand) || [];
+            if (standIds.length === 0) {
+                console.warn('[getActiveForAgent] Aucun stand affecté pour agent', agentId);
+                return [];
+            }
+
+            // Étape 2 : récupérer les journées actives pour ces stands
+            const { data, error } = await supabase
+                .from('journee')
+                .select('*, stand(*), journee_operateur(*, operateur(*))')
+                .in('id_stand', standIds)
+                .in('statut', ['Pre-ouverte', 'Ouverte']);
+
+            if (error) {
+                console.error('[getActiveForAgent] Erreur lecture journee (possible RLS):', JSON.stringify(error));
+                // Si c'est un problème RLS, on retourne un tableau vide plutôt que de crasher
+                return [];
+            }
+
+            return data || [];
         },
         async getStandCurrentSession(standId: number) {
             const { data, error } = await supabase.from('journee').select('*, journee_operateur(*, operateur(*))').eq('id_stand', standId).in('statut', ['Pre-ouverte', 'Ouverte']).order('created_at', { ascending: false }).limit(1).maybeSingle();
